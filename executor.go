@@ -51,6 +51,11 @@ type Request struct {
 }
 
 func (ce *CommandExecutor) Execute(ctx context.Context, r *Request) (Output, error) {
+	r.applyDefaults()
+	if err := r.validate(); err != nil {
+		return "", err
+	}
+
 	buf := &bytes.Buffer{}
 	errBuf := &bytes.Buffer{}
 	request := ce.rest.client.
