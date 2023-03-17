@@ -50,15 +50,17 @@ func TestCommandExecutor_Execute(t *testing.T) {
 
 	t.Run("integration testing of executing ls in nginx", func(t *testing.T) {
 		// todo: return also an error
-		executor := podexecutor.NewCommandExecutor(masterURL, kubeConfig)
+		executor, err := podexecutor.NewCommandExecutor(masterURL, kubeConfig)
+		if err != nil {
+			t.Fatalf("executor constructor should not have returned an error: %s", err.Error())
+		}
 
-		output, err := executor.Execute(
-			context.TODO(),
-			"nginx",
-			"nginx",
-			"executor",
-			[]string{"ls", "-a"},
-		)
+		output, err := executor.Execute(context.TODO(), &podexecutor.Request{
+			Pod:       "nginx",
+			Namespace: "executor",
+			Container: "nginx",
+			Command:   []string{"ls", "-a"},
+		})
 		if err != nil {
 			t.Errorf("executor returned an error: %s", err.Error())
 		}
@@ -78,17 +80,19 @@ func TestCommandExecutor_Execute(t *testing.T) {
 
 	t.Run("handle non existent shell interpretation command", func(t *testing.T) {
 		// todo: return also an error
-		executor := podexecutor.NewCommandExecutor(masterURL, kubeConfig)
+		executor, err := podexecutor.NewCommandExecutor(masterURL, kubeConfig)
+		if err != nil {
+			t.Fatalf("executor constructor should not have returned an error: %s", err.Error())
+		}
 
-		output, err := executor.Execute(
-			context.TODO(),
-			"nginx",
-			"nginx",
-			"executor",
-			[]string{"sh", "-c", `"non existent command"`},
-		)
+		output, err := executor.Execute(context.TODO(), &podexecutor.Request{
+			Pod:       "nginx",
+			Namespace: "executor",
+			Container: "nginx",
+			Command:   []string{"sh", "-c", `"non existent command"`},
+		})
 		if err == nil {
-			t.Fatal("executor should have returned an error")
+			t.Fatal("execute method should have returned an error")
 		}
 
 		errMsg := strings.TrimSpace(err.Error())
