@@ -10,6 +10,32 @@ import (
 	"testing"
 )
 
+var nginxFolders = []string{
+	".",
+	"..",
+	"bin",
+	"boot",
+	"dev",
+	"docker-entrypoint.d",
+	"docker-entrypoint.sh",
+	"etc",
+	"home",
+	"lib",
+	"media",
+	"mnt",
+	"opt",
+	"proc",
+	"product_uuid",
+	"srv",
+	"var",
+	"root",
+	"run",
+	"sbin",
+	"tmp",
+	"usr",
+	"sys",
+}
+
 func TestCommandExecutor_Execute(t *testing.T) {
 	masterURL := os.Getenv("K8S_MASTER_URL")
 	kubeConfig := os.Getenv("K8S_CONFIG")
@@ -22,8 +48,7 @@ func TestCommandExecutor_Execute(t *testing.T) {
 		t.Fatalf("kube config cannot be empty")
 	}
 
-	t.Run("integration testing of executing date in nginx", func(t *testing.T) {
-
+	t.Run("integration testing of executing ls in nginx", func(t *testing.T) {
 		// todo: return also an error
 		executor := podexecutor.NewCommandExecutor(masterURL, kubeConfig)
 
@@ -39,42 +64,40 @@ func TestCommandExecutor_Execute(t *testing.T) {
 		}
 
 		if output == "" {
-			t.Errorf("error: executor output shpuld not be empty")
+			t.Errorf("error: executor output should not be empty")
 		}
 
-		files := outputToSlice(output)
-		want := []string{
-			".",
-			"..",
-			"bin",
-			"boot",
-			"dev",
-			"docker-entrypoint.d",
-			"docker-entrypoint.sh",
-			"etc",
-			"home",
-			"lib",
-			"media",
-			"mnt",
-			"opt",
-			"proc",
-			"product_uuid",
-			"srv",
-			"var",
-			"root",
-			"run",
-			"sbin",
-
-			"tmp",
-
-			"usr",
-			"sys",
-		}
-
+		folders := outputToSlice(output)
+		want := nginxFolders
 		sort.Strings(want)
-		sort.Strings(files)
-		if !reflect.DeepEqual(files, want) {
-			t.Errorf("error: executor output expected to be %+v, got %+v", want, files)
+
+		if !reflect.DeepEqual(folders, want) {
+			t.Errorf("error: executor output expected to be %+v, got %+v", want, folders)
+		}
+	})
+
+	t.Run("handle non existent shell interpretation command", func(t *testing.T) {
+		// todo: return also an error
+		executor := podexecutor.NewCommandExecutor(masterURL, kubeConfig)
+
+		output, err := executor.Execute(
+			context.TODO(),
+			"nginx",
+			"nginx",
+			"executor",
+			[]string{"sh", "-c", `"non existent command"`},
+		)
+		if err == nil {
+			t.Fatal("executor should have returned an error")
+		}
+
+		errMsg := strings.TrimSpace(err.Error())
+		if !strings.Contains(errMsg, `failed executing command [sh -c "non existent command"] on executor/nginx in container nginx: command terminated with exit code 127, stderr: sh: 1: non existent command: not found`) {
+			t.Errorf("error message is invalid: %s", errMsg)
+		}
+
+		if output != "" {
+			t.Errorf("error: executor output should be empty")
 		}
 	})
 }
@@ -91,5 +114,6 @@ func outputToSlice(out podexecutor.Output) []string {
 
 		result = append(result, str)
 	}
+	sort.Strings(result)
 	return result
 }

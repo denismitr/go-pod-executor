@@ -58,15 +58,21 @@ func (ce *CommandExecutor) Execute(
 		Stdout: buf,
 		Stderr: errBuf,
 	}); streamErr != nil {
-		return "", fmt.Errorf(
-			"failed executing command %+v on %s/%s request URL: %s, err: %s, bufErr: %s",
+		fullErr := fmt.Errorf(
+			"failed executing command %+v on %s/%s in container %s: %s",
 			command,
 			namespace,
 			podName,
-			request.URL().String(),
+			containerName,
 			streamErr.Error(),
-			errBuf.String()+buf.String(),
 		)
+
+		stdErr := errBuf.String()
+		if stdErr != "" {
+			fullErr = fmt.Errorf("%w, stderr: %s", fullErr, stdErr)
+		}
+
+		return "", fullErr
 	}
 
 	return Output(buf.String()), nil
