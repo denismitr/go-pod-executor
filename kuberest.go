@@ -14,8 +14,20 @@ type k8sRest struct {
 	config *rest.Config
 }
 
-func newK8SRestClient(masterURL, config string) (*k8sRest, error) {
-	restCfg, err := NewRestConfig(masterURL, config)
+func newK8SRestFromExistingConfig(restCfg *rest.Config) (*k8sRest, error) {
+	k8sClientSet, err := kubernetes.NewForConfig(restCfg)
+	if err != nil {
+		return nil, fmt.Errorf("could not create kubernetes client set for rest config: %w", err)
+	}
+
+	return &k8sRest{
+		client: k8sClientSet.CoreV1().RESTClient(),
+		config: restCfg,
+	}, nil
+}
+
+func newK8SRest(masterURL, config string) (*k8sRest, error) {
+	restCfg, err := newRestConfig(masterURL, config)
 	if err != nil {
 		return nil, err
 	}
@@ -31,7 +43,7 @@ func newK8SRestClient(masterURL, config string) (*k8sRest, error) {
 	}, nil
 }
 
-func NewRestConfig(masterURL, config string) (*rest.Config, error) {
+func newRestConfig(masterURL, config string) (*rest.Config, error) {
 	k8sCfg, err := clientcmd.BuildConfigFromKubeconfigGetter(
 		masterURL,
 		func() (*clientcmdapi.Config, error) {

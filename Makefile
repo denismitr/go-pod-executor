@@ -10,5 +10,5 @@ deps:
 test: export K8S_MASTER_URL=$(MASTER_URL)
 test: export K8S_CONFIG=$(KUBE_CONFIG)
 test:
-	@echo $(K8S_MASTER_URL)
+	@echo running integtation tests on $(K8S_MASTER_URL)
 	go test -v ./... -count=1

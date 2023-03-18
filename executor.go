@@ -7,6 +7,7 @@ import (
 	"io"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/remotecommand"
 )
 
@@ -40,12 +41,21 @@ func (r Result) ErrOutput() string {
 }
 
 func NewCommandExecutor(masterURL string, kubeConfig string) (*CommandExecutor, error) {
-	rst, err := newK8SRestClient(masterURL, kubeConfig)
+	rst, err := newK8SRest(masterURL, kubeConfig)
 	if err != nil {
 		return nil, err
 	}
 
 	return &CommandExecutor{masterURL: masterURL, rest: rst}, nil
+}
+
+func NewCommandExecutorFromConfig(restCfg *rest.Config) (*CommandExecutor, error) {
+	rst, err := newK8SRestFromExistingConfig(restCfg)
+	if err != nil {
+		return nil, err
+	}
+
+	return &CommandExecutor{masterURL: restCfg.Host, rest: rst}, nil
 }
 
 func (ce *CommandExecutor) Execute(

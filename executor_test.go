@@ -50,7 +50,7 @@ func TestCommandExecutor_Execute(t *testing.T) {
 		t.Fatalf("kube config cannot be empty")
 	}
 
-	t.Run("integration testing with executing ls in nginx", func(t *testing.T) {
+	t.Run("integration testing with executing ls in nginx container", func(t *testing.T) {
 		// todo: return also an error
 		executor, err := podexecutor.NewCommandExecutor(masterURL, kubeConfig)
 		if err != nil {
@@ -61,6 +61,36 @@ func TestCommandExecutor_Execute(t *testing.T) {
 			Pod:       "nginx",
 			Namespace: "executor",
 			Container: "nginx",
+			Command:   []string{"ls", "-a"},
+		})
+		if err != nil {
+			t.Fatalf("executor returned an error: %s", err.Error())
+		}
+
+		output := result.Output()
+		if output == "" {
+			t.Errorf("error: executor output should not be empty")
+		}
+
+		folders := outputToSlice(output)
+		want := nginxFolders
+		sort.Strings(want)
+
+		if !reflect.DeepEqual(folders, want) {
+			t.Errorf("error: executor output expected to be %+v, got %+v", want, folders)
+		}
+	})
+
+	t.Run("integration testing with executing ls in nginx default container", func(t *testing.T) {
+		// todo: return also an error
+		executor, err := podexecutor.NewCommandExecutor(masterURL, kubeConfig)
+		if err != nil {
+			t.Fatalf("executor constructor should not have returned an error: %s", err.Error())
+		}
+
+		result, err := executor.Execute(context.TODO(), &podexecutor.Request{
+			Pod:       "nginx",
+			Namespace: "executor",
 			Command:   []string{"ls", "-a"},
 		})
 		if err != nil {
