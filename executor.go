@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/remotecommand"
-	"time"
 )
 
 var (
@@ -19,7 +19,25 @@ type CommandExecutor struct {
 	rest      *k8sRest
 }
 
-type Output string
+type Result struct {
+	buf    *bytes.Buffer
+	errBuf *bytes.Buffer
+}
+
+func newResult() *Result {
+	return &Result{
+		buf:    &bytes.Buffer{},
+		errBuf: &bytes.Buffer{},
+	}
+}
+
+func (r Result) Output() string {
+	return r.buf.String()
+}
+
+func (r Result) ErrOutput() string {
+	return r.errBuf.String()
+}
 
 func NewCommandExecutor(masterURL string, kubeConfig string) (*CommandExecutor, error) {
 	rst, err := newK8SRestClient(masterURL, kubeConfig)
@@ -30,96 +48,77 @@ func NewCommandExecutor(masterURL string, kubeConfig string) (*CommandExecutor, 
 	return &CommandExecutor{masterURL: masterURL, rest: rst}, nil
 }
 
-type Request struct {
-	// Pod is the name of the pod where command should be executed
-	// required field
-	Pod string
-
-	// Namespace is the kubernetes namespace where command should be executed
-	// by default is set to `default` namespace
-	Namespace string
-
-	// Container is the container name where command should be executed
-	Container string
-
-	// Command is the command that is supposed to be executed
-	Command []string
-
-	// Timeout is the timeout for the command execution
-	// defaults to 1 minute
-	Timeout time.Duration
-}
-
-func (ce *CommandExecutor) Execute(ctx context.Context, r *Request) (Output, error) {
-	r.applyDefaults()
-	if err := r.validate(); err != nil {
-		return "", err
+func (ce *CommandExecutor) Execute(
+	ctx context.Context,
+	req *Request,
+) (*Result, error) {
+	req.applyDefaults()
+	if err := req.validate(); err != nil {
+		return nil, err
 	}
 
-	buf := &bytes.Buffer{}
-	errBuf := &bytes.Buffer{}
-	request := ce.rest.client.
-		Post().
-		Namespace(r.Namespace).
-		Resource("pods").
-		Name(r.Pod).
-		SubResource("exec").
-		VersionedParams(&corev1.PodExecOptions{
-			Container: r.Container,
-			Command:   r.Command,
-			Stdin:     false,
-			Stdout:    true,
-			Stderr:    true,
-			TTY:       false,
-		}, scheme.ParameterCodec).Timeout(r.Timeout)
-
-	exec, err := remotecommand.NewSPDYExecutor(ce.rest.config, "POST", request.URL())
+	exec, err := ce.prepareRequestExecutor(req)
 	if err != nil {
-		return "", fmt.Errorf("failed to instantiate SPDY executor: %w", err)
+		return nil, err
 	}
 
-	if streamErr := exec.StreamWithContext(ctx, remotecommand.StreamOptions{
-		Stdout: buf,
-		Stderr: errBuf,
-	}); streamErr != nil {
+	result := newResult()
+	streamOpts := newStreamOptions(req, result)
+	if streamErr := exec.StreamWithContext(ctx, streamOpts); streamErr != nil {
 		fullErr := fmt.Errorf(
 			"failed executing command %+v on %s/%s in container %s: %s",
-			r.Command,
-			r.Namespace,
-			r.Pod,
-			r.Container,
+			req.Command,
+			req.Namespace,
+			req.Pod,
+			req.Container,
 			streamErr.Error(),
 		)
 
-		stdErr := errBuf.String()
+		stdErr := result.errBuf.String()
 		if stdErr != "" {
 			fullErr = fmt.Errorf("%w, stderr: %s", fullErr, stdErr)
 		}
 
-		return "", fullErr
+		return nil, fullErr
 	}
 
-	return Output(buf.String()), nil
+	return result, nil
 }
 
-func (r *Request) applyDefaults() {
-	if r.Namespace == "" {
-		r.Namespace = ""
-	}
+func (ce *CommandExecutor) prepareRequestExecutor(req *Request) (remotecommand.Executor, error) {
+	request := ce.rest.client.
+		Post().
+		Namespace(req.Namespace).
+		Resource("pods").
+		Name(req.Pod).
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Container: req.Container,
+			Command:   req.Command,
+			Stdin:     false,
+			Stdout:    true,
+			Stderr:    true,
+			TTY:       false,
+		}, scheme.ParameterCodec).Timeout(req.Timeout)
 
-	if r.Timeout == 0 {
-		r.Timeout = 1 * time.Minute
+	exec, err := remotecommand.NewSPDYExecutor(ce.rest.config, "POST", request.URL())
+	if err != nil {
+		return nil, fmt.Errorf("failed to prepare request executor: %w", err)
 	}
+	return exec, nil
 }
 
-func (r *Request) validate() error {
-	if r.Pod == "" {
-		return fmt.Errorf("%w: pod name must be specified", ErrInvalidRequest)
+func newStreamOptions(req *Request, r *Result) remotecommand.StreamOptions {
+	opts := remotecommand.StreamOptions{}
+	if req.Stdout != nil {
+		opts.Stdout = io.MultiWriter(r.buf, req.Stdout)
+	} else {
+		opts.Stdout = r.buf
 	}
-
-	if len(r.Command) == 0 {
-		return fmt.Errorf("%w: command slice should not be empty", ErrInvalidRequest)
+	if req.Stderr != nil {
+		opts.Stderr = io.MultiWriter(r.errBuf, req.Stderr)
+	} else {
+		opts.Stderr = r.errBuf
 	}
-
-	return nil
+	return opts
 }
