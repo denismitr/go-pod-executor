@@ -2,7 +2,7 @@
 ### A library that helps to execute commands in kubernetes pods
 
 ### Usage
-Execute method manages a blocking call to the container and returns a result with the output of the command
+Execute method manages a blocking call to the container and returns a complete result of the command output
 ```go
 executor, err := podexecutor.NewCommandExecutor(masterURL, kubeConfig)
 if err != nil {

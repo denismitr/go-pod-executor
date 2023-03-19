@@ -184,7 +184,7 @@ func outputToSlice(out string) []string {
 	for i := range slice {
 		str := strings.TrimSpace(slice[i])
 		str = strings.ReplaceAll(str, " ", "")
-		if str == "" || str == " " {
+		if str == "" {
 			continue
 		}
 
